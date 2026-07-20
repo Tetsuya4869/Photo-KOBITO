@@ -1,6 +1,7 @@
 import type { PhotoFeature } from '../core/types';
 import { parseExif } from '../core/features/exif';
 import { extractFeatures } from '../core/features/extract';
+import { isValidGps } from '../core/geo/haversine';
 import { mulberry32 } from '../core/util/seededRandom';
 
 /** 特徴抽出に使うワーク画像の一辺（正方形に縮小）。 */
@@ -75,6 +76,8 @@ export function metadataOnlyFeature(
   const seed = seedFromString(id);
   const hex = (seed >>> 0).toString(16).padStart(8, '0');
   const hex2 = (Math.imul(seed, 2654435761) >>> 0).toString(16).padStart(8, '0');
+  // デコード済み画像と同じ GPS 検証を適用（null-island (0,0) 等がジオクラスタに漏れないように）。
+  const gps = exif.gps && isValidGps(exif.gps.lat, exif.gps.lon) ? exif.gps : null;
   return {
     id,
     name,
@@ -84,7 +87,7 @@ export function metadataOnlyFeature(
     aspect: 1,
     takenAt: exif.takenAt ?? (Number.isFinite(lastModified) ? lastModified : null),
     takenAtSource: exif.takenAt != null ? 'exif' : 'mtime',
-    gps: exif.gps,
+    gps,
     camera: exif.make || exif.model ? { make: exif.make, model: exif.model } : null,
     phash: hex + hex2,
     colors: [],

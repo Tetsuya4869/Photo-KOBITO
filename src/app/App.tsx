@@ -18,16 +18,18 @@ export function App() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const thumbFor = useCallback(
-    (id: string): string | undefined => featuresById.get(id)?.coverThumb ?? urlFor(id, fileById.get(id)),
+    (id: string): string | undefined => featuresById.get(id)?.coverThumb ?? urlFor(fileById.get(id)),
     [featuresById, fileById, urlFor],
   );
 
   const onFiles = useCallback(
     (files: File[]) => {
       setSelected(null);
+      // 前バッチの object URL を解放してから解析（「＋写真を追加」でも取り違え・リークしない）。
+      releaseAll();
       void run(files);
     },
-    [run],
+    [run, releaseAll],
   );
 
   const openPicker = useCallback(() => inputRef.current?.click(), []);
