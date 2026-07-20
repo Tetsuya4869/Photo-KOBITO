@@ -101,3 +101,64 @@ describe('parseExif — 欠落・異常系', () => {
     expect(exif.takenAt).toBe(Date.UTC(2026, 0, 2, 3, 4, 5));
   });
 });
+
+describe('parseExif — 堅牢性（追加）', () => {
+  it('リトルエンディアンのインライン SHORT（orientation/iso/pixel）と閏日', () => {
+    const exif = parseExif(
+      buildExifJpeg({
+        byteOrder: 'II',
+        orientation: 8,
+        iso: 400,
+        pixelWidth: 6000,
+        pixelHeight: 4000,
+        fNumber: [40, 10],
+        focalLength: [50, 1],
+        exposure: [1, 500],
+        dateTimeOriginal: '2020:02:29 12:00:00',
+      }),
+    );
+    expect(exif.orientation).toBe(8);
+    expect(exif.iso).toBe(400);
+    expect(exif.pixelWidth).toBe(6000);
+    expect(exif.pixelHeight).toBe(4000);
+    expect(exif.fNumber).toBeCloseTo(4.0, 2);
+    expect(exif.takenAt).toBe(Date.UTC(2020, 1, 29, 12, 0, 0));
+  });
+
+  it('西経・南緯（MM）の符号', () => {
+    const exif = parseExif(
+      buildExifJpeg({
+        byteOrder: 'MM',
+        gps: { latRef: 'S', lat: [[10, 1], [0, 1], [0, 1]], lonRef: 'W', lon: [[122, 1], [25, 1], [0, 1]] },
+      }),
+    );
+    expect(exif.gps!.lat).toBeCloseTo(-10, 5);
+    expect(exif.gps!.lon).toBeCloseTo(-122.4167, 3);
+  });
+
+  it('ランダム/短小バッファでも throw しない（ファズ）', () => {
+    for (let n = 0; n < 40; n++) {
+      const arr = new Uint8Array(n);
+      for (let i = 0; i < n; i++) arr[i] = (i * 37 + n * 13) & 0xff;
+      if (n >= 2) {
+        arr[0] = 0xff;
+        arr[1] = 0xd8;
+      }
+      expect(() => parseExif(arr.buffer)).not.toThrow();
+    }
+  });
+
+  it('EXIF を任意の位置で切り詰めても throw しない（全カットオフ）', () => {
+    const full = new Uint8Array(
+      buildExifJpeg({
+        byteOrder: 'MM',
+        make: 'X',
+        dateTimeOriginal: '2021:05:05 05:05:05',
+        gps: { latRef: 'N', lat: [[1, 1], [2, 1], [3, 1]], lonRef: 'E', lon: [[4, 1], [5, 1], [6, 1]] },
+      }),
+    );
+    for (let cut = 0; cut < full.length; cut++) {
+      expect(() => parseExif(full.slice(0, cut).buffer)).not.toThrow();
+    }
+  });
+});
